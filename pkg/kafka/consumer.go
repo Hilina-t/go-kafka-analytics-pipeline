@@ -38,6 +38,8 @@ func NewConsumer(brokers []string, topic, groupID string) *Consumer {
 func (c *Consumer) ConsumeEvents(ctx context.Context, handler func(*models.AnalyticsEvent) error) error {
 	log.Printf("Starting consumer for topic: %s, group: %s", c.topic, c.groupID)
 
+	const maxRetries = 3
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -61,13 +63,27 @@ func (c *Consumer) ConsumeEvents(ctx context.Context, handler func(*models.Analy
 
 			log.Printf("Processing event - Type: %s, ID: %s, User: %s", event.Type, event.ID, event.UserID)
 
-			if err := handler(&event); err != nil {
-				log.Printf("Failed to process event: %v", err)
-				continue
+			// Process with retries
+			processed := false
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				if err := handler(&event); err != nil {
+					log.Printf("Failed to process event (attempt %d/%d): %v", attempt, maxRetries, err)
+					if attempt == maxRetries {
+						log.Printf("Max retries reached for event %s, moving to next message", event.ID)
+						// Consider sending to dead letter queue here in production
+						break
+					}
+					continue
+				}
+				processed = true
+				break
 			}
 
-			if err := c.reader.CommitMessages(ctx, msg); err != nil {
-				log.Printf("Failed to commit message: %v", err)
+			// Commit message after processing or max retries
+			if processed || true { // Always commit to avoid blocking
+				if err := c.reader.CommitMessages(ctx, msg); err != nil {
+					log.Printf("Failed to commit message: %v", err)
+				}
 			}
 		}
 	}

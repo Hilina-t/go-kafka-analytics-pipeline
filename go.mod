@@ -1,6 +1,8 @@
 module github.com/Hilina-t/go-kafka-analytics-pipeline
 
-go 1.24.10
+go 1.23
+
+toolchain go1.24.10
 
 require (
 	github.com/google/uuid v1.6.0

@@ -72,7 +72,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/event", s.handleEvent)
 	mux.HandleFunc("/health", s.handleHealth)
@@ -85,8 +85,23 @@ func (s *Server) Start() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("Producer server starting on port %s", s.port)
-	return server.ListenAndServe()
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Producer server starting on port %s", s.port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	<-ctx.Done()
+	
+	// Graceful shutdown with 30 second timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	log.Println("Shutting down server gracefully...")
+	return server.Shutdown(shutdownCtx)
 }
 
 func main() {
@@ -103,19 +118,23 @@ func main() {
 	server := NewServer(producer, serverPort)
 
 	// Handle graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		<-sigChan
-		log.Println("Shutting down producer service...")
-		producer.Close()
-		os.Exit(0)
+		log.Println("Received shutdown signal...")
+		cancel()
 	}()
 
-	if err := server.Start(); err != nil {
+	if err := server.Start(ctx); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed: %v", err)
 	}
+
+	log.Println("Server stopped gracefully")
 }
 
 func getEnv(key, defaultValue string) string {
