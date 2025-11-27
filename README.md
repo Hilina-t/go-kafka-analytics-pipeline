@@ -28,7 +28,7 @@ A real-time analytics pipeline built with Apache Kafka and Go that captures, pro
 
 ## Prerequisites
 
-- Go 1.21 or higher
+- Go 1.23 or higher
 - Docker and Docker Compose (for running Kafka)
 - Make (optional, for using Makefile commands)
 
