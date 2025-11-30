@@ -1,0 +1,34 @@
+{
+  "info": {
+    "name": "Analytics Event API",
+    "_postman_id": "d4f0b0c0-1234-4567-8901-analytics-example",
+    "description": "Collection generated from the Analytics Event API spec.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Send Analytics Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/event",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["event"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"page_view\",\n  \"user_id\": \"user123\",\n  \"session_id\": \"session456\",\n  \"url\": \"https://example.com/home\",\n  \"path\": \"/home\",\n  \"referrer\": \"https://google.com\",\n  \"user_agent\": \"Mozilla/5.0\",\n  \"ip_address\": \"192.168.1.1\",\n  \"metadata\": {\n    \"page_title\": \"Home Page\",\n    \"load_time\": 1200\n  }\n}"
+        }
+      },
+      "response": []
+    }
+  ]
+}
