@@ -1,0 +1,86 @@
+openapi: 3.0.3
+info:
+  title: Analytics Event API
+  version: 1.0.0
+  description: API for sending analytics and tracking events.
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /event:
+    post:
+      summary: Submit an analytics event
+      description: Accepts analytics events such as page views, clicks, and custom events.
+      tags:
+        - Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+      responses:
+        "200":
+          description: Event successfully received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+        "400":
+          description: Invalid event payload
+        "500":
+          description: Server error
+
+components:
+  schemas:
+    Event:
+      type: object
+      required:
+        - type
+        - user_id
+        - session_id
+      properties:
+        type:
+          type: string
+          description: Event type (e.g., page_view, click, custom)
+          example: page_view
+        user_id:
+          type: string
+          description: Unique user identifier
+          example: user123
+        session_id:
+          type: string
+          description: User session identifier
+          example: session456
+        url:
+          type: string
+          format: uri
+          description: Full URL of the event context
+          example: https://example.com/home
+        path:
+          type: string
+          description: Path portion of the URL
+          example: /home
+        referrer:
+          type: string
+          description: Referring URL
+          example: https://google.com
+        user_agent:
+          type: string
+          description: Browser user agent string
+          example: Mozilla/5.0
+        ip_address:
+          type: string
+          description: IP address of the user
+          example: 192.168.1.1
+        metadata:
+          type: object
+          description: Arbitrary event metadata
+          example:
+            page_title: Home Page
+            load_time: 1200
