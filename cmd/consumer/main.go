@@ -6,103 +6,129 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Hilina-t/go-kafka-analytics-pipeline/constants"
+	"github.com/Hilina-t/go-kafka-analytics-pipeline/pkg/analytics"
 	"github.com/Hilina-t/go-kafka-analytics-pipeline/pkg/kafka"
 	"github.com/Hilina-t/go-kafka-analytics-pipeline/pkg/models"
 )
 
-// Analytics holds aggregated analytics data
-type Analytics struct {
-	mu              sync.RWMutex
-	PageViews       map[string]int            // URL -> count
-	UniqueUsers     map[string]bool           // UserID -> exists
-	EventsByType    map[models.EventType]int  // EventType -> count
-	TopPages        []PageStats
-	LastUpdated     time.Time
+// ConsumerService handles event processing and analytics
+type ConsumerService struct {
+	consumer         *kafka.Consumer
+	analyticsService *analytics.Service
 }
 
-type PageStats struct {
-	URL   string
-	Count int
-}
-
-func NewAnalytics() *Analytics {
-	return &Analytics{
-		PageViews:    make(map[string]int),
-		UniqueUsers:  make(map[string]bool),
-		EventsByType: make(map[models.EventType]int),
-		LastUpdated:  time.Now(),
+// NewConsumerService creates a new consumer service
+func NewConsumerService(consumer *kafka.Consumer, analyticsService *analytics.Service) *ConsumerService {
+	return &ConsumerService{
+		consumer:         consumer,
+		analyticsService: analyticsService,
 	}
 }
 
-func (a *Analytics) ProcessEvent(event *models.AnalyticsEvent) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+// processEvent handles incoming events from Kafka
+func (cs *ConsumerService) processEvent(event *models.AnalyticsEvent) error {
+	log.Printf("Processing %s event for user %s on %s", event.Type, event.UserID, event.URL)
 
-	// Track event by type
-	a.EventsByType[event.Type]++
-
-	// Track unique users
-	if event.UserID != "" {
-		a.UniqueUsers[event.UserID] = true
+	// Process the event through analytics service
+	if err := cs.analyticsService.ProcessEvent(event); err != nil {
+		log.Printf("Error processing analytics event: %v", err)
+		return err
 	}
 
-	// Track page views
-	if event.Type == models.PageView && event.URL != "" {
-		a.PageViews[event.URL]++
+	// Check for alerts
+	alerts := cs.analyticsService.CheckAlerts()
+	for _, alert := range alerts {
+		log.Printf("ALERT [%s]: %s", alert.Severity, alert.Message)
 	}
 
-	a.LastUpdated = time.Now()
-
-	log.Printf("Processed %s event for user %s on %s", event.Type, event.UserID, event.URL)
 	return nil
 }
 
-func (a *Analytics) PrintStats() {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+// printStats prints current analytics statistics
+func (cs *ConsumerService) printStats() {
+	snapshot := cs.analyticsService.GetSnapshot()
 
-	fmt.Println("\n=== Analytics Summary ===")
-	fmt.Printf("Last Updated: %s\n", a.LastUpdated.Format(time.RFC3339))
-	fmt.Printf("Unique Users: %d\n", len(a.UniqueUsers))
-	
+	fmt.Println("\n=== Real-Time Analytics Summary ===")
+	fmt.Printf("Last Updated: %s\n", snapshot.Timestamp.Format(time.RFC3339))
+	fmt.Printf("Total Events: %d\n", snapshot.TotalEvents)
+	fmt.Printf("Unique Users: %d\n", snapshot.UniqueUsers)
+	fmt.Printf("Active Sessions: %d\n", snapshot.ActiveSessions)
+
 	fmt.Println("\nEvents by Type:")
-	for eventType, count := range a.EventsByType {
+	for eventType, count := range snapshot.EventsByType {
 		fmt.Printf("  %s: %d\n", eventType, count)
 	}
 
-	if len(a.PageViews) > 0 {
+	if len(snapshot.TopPages) > 0 {
 		fmt.Println("\nTop Pages:")
-		count := 0
-		for url, views := range a.PageViews {
-			fmt.Printf("  %s: %d views\n", url, views)
-			count++
-			if count >= 10 {
+		for i, page := range snapshot.TopPages {
+			if i >= 10 {
 				break
 			}
+			fmt.Printf("  %s: %d views (%d unique visitors)\n",
+				page.Path, page.Views, page.UniqueVisitors)
 		}
 	}
-	fmt.Println("========================")
+
+	if len(snapshot.TrafficSources) > 0 {
+		fmt.Println("\nTop Traffic Sources:")
+		for i, source := range snapshot.TrafficSources {
+			if i >= 5 {
+				break
+			}
+			fmt.Printf("  %s: %d visits (%.1f%%)\n",
+				source.Source, source.Count, source.Percent)
+		}
+	}
+
+	fmt.Printf("\nPerformance Metrics:")
+	fmt.Printf("  Average Load Time: %.1fms\n", snapshot.PerformanceMetrics.AverageLoadTime)
+	fmt.Printf("  Fast Pages: %d, Slow Pages: %d\n",
+		snapshot.PerformanceMetrics.FastPagesCount,
+		snapshot.PerformanceMetrics.SlowPagesCount)
+
+	fmt.Println("===================================")
 }
 
 func main() {
-	// Get configuration from environment variables
-	kafkaBrokers := getEnv("KAFKA_BROKERS", "localhost:9092")
-	kafkaTopic := getEnv("KAFKA_TOPIC", "analytics-events")
-	consumerGroup := getEnv("CONSUMER_GROUP", "analytics-consumer-group")
 
-	log.Printf("Starting consumer with brokers: %s, topic: %s, group: %s", 
-		kafkaBrokers, kafkaTopic, consumerGroup)
+	log.Printf("Starting enhanced consumer with brokers: %s, topic: %s, group: %s",
+		constants.KafkaBrokers, constants.KafkaTopic, constants.ConsumerGroup)
 
-	// Create analytics processor
-	analytics := NewAnalytics()
+	// Create analytics service
+	analyticsService := analytics.NewService()
+
+	// Add some default alert configurations
+	analyticsService.AddAlert(models.AlertConfig{
+		Name:          "High Load Time Alert",
+		Type:          "performance",
+		Metric:        "average_load_time",
+		Threshold:     5000, // 5 seconds
+		Operator:      "gt",
+		Enabled:       true,
+		WindowMinutes: 5,
+	})
+
+	analyticsService.AddAlert(models.AlertConfig{
+		Name:          "Traffic Surge Alert",
+		Type:          "traffic",
+		Metric:        "total_events",
+		Threshold:     1000, // 1000 events
+		Operator:      "gt",
+		Enabled:       true,
+		WindowMinutes: 5,
+	})
 
 	// Create Kafka consumer
-	consumer := kafka.NewConsumer([]string{kafkaBrokers}, kafkaTopic, consumerGroup)
+	consumer := kafka.NewConsumer([]string{constants.KafkaBrokers}, constants.KafkaTopic, constants.ConsumerGroup)
 	defer consumer.Close()
+
+	// Create consumer service
+	consumerService := NewConsumerService(consumer, analyticsService)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,7 +141,7 @@ func main() {
 	go func() {
 		<-sigChan
 		log.Println("\nReceived shutdown signal, printing final stats...")
-		analytics.PrintStats()
+		consumerService.printStats()
 		cancel()
 	}()
 
@@ -126,7 +152,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				analytics.PrintStats()
+				consumerService.printStats()
 			case <-ctx.Done():
 				return
 			}
@@ -134,20 +160,13 @@ func main() {
 	}()
 
 	// Start consuming events
-	log.Println("Consumer started, waiting for events...")
-	if err := consumer.ConsumeEvents(ctx, analytics.ProcessEvent); err != nil {
+	log.Println("Enhanced consumer started, waiting for events...")
+	log.Println("Real-time analytics processing enabled with alerts")
+	if err := consumer.ConsumeEvents(ctx, consumerService.processEvent); err != nil {
 		if err == context.Canceled {
 			log.Println("Consumer stopped gracefully")
 		} else {
 			log.Fatalf("Consumer error: %v", err)
 		}
 	}
-}
-
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
 }

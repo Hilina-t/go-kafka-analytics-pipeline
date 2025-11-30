@@ -1,15 +1,34 @@
-# Real-Time Website Analytics Tracker with Kafka and Go
+# Real-Time Website Analytics Dashboard with Kafka and Go
 
-A real-time analytics pipeline built with Apache Kafka and Go that captures, processes, and aggregates website analytics events such as page views, clicks, and user sessions.
+A comprehensive real-time analytics platform built with Apache Kafka and Go that captures, processes, and visualizes website analytics events. Features a beautiful web dashboard with live charts, real-time event streaming, and intelligent alerting.
 
 ## Features
 
+### 🎯 Core Analytics
 - **Event Producer API**: HTTP API endpoint to receive analytics events
-- **Event Consumer**: Background service to process and aggregate events
+- **Event Consumer**: Background service to process and aggregate events  
 - **Real-time Processing**: Events are processed in real-time using Apache Kafka
 - **Event Types**: Support for page views, clicks, sessions, and custom events
 - **Scalable Architecture**: Kafka-based architecture allows horizontal scaling
+
+### 📊 Real-Time Dashboard
+- **Interactive Web Dashboard**: Beautiful, responsive dashboard with live updates
+- **Real-time Charts**: Line charts, doughnuts, bar charts with Chart.js
+- **Live Event Stream**: See events as they happen with WebSocket updates
+- **Key Metrics**: Total events, unique users, active sessions, performance metrics
+- **Device & Browser Analytics**: Detailed breakdowns of user environments
+
+### 🔔 Intelligence & Alerts
+- **Smart Alerts**: Configurable threshold-based alerting system
+- **Performance Monitoring**: Track page load times and performance metrics
+- **Traffic Source Analysis**: Understand where your traffic comes from
+- **Time-windowed Analytics**: Hourly breakdowns and historical data
+
+### 🛠 DevOps & Deployment
+- **WebSocket Support**: Real-time bidirectional communication
 - **Docker Support**: Complete Docker Compose setup for easy deployment
+- **Graceful Shutdown**: Proper cleanup and resource management
+- **Health Monitoring**: Built-in health checks and monitoring endpoints
 
 ## Architecture
 
@@ -18,13 +37,24 @@ A real-time analytics pipeline built with Apache Kafka and Go that captures, pro
 │   Website   │───────>│   Producer   │───────>│ Kafka  │───────>│   Consumer   │
 │  (Clients)  │  HTTP  │   Service    │        │ Topics │        │   Service    │
 └─────────────┘        └──────────────┘        └────────┘        └──────────────┘
-                            :8080                                       │
-                                                                        ▼
-                                                                ┌──────────────┐
-                                                                │  Analytics   │
-                                                                │  Processing  │
-                                                                └──────────────┘
+                            │:8080                                       │
+                            │                                            ▼
+                            ▼                                    ┌──────────────┐
+                ┌──────────────────┐                           │  Analytics   │
+                │  Web Dashboard   │◄──────────────────────────│  Processing  │
+                │   (Real-time)    │      WebSocket             │   & Alerts   │
+                └──────────────────┘                           └──────────────┘
+                       │                                               │
+                   Browser                                       Real-time
+                   Client                                        Aggregation
 ```
+
+**Components:**
+- **Producer Service**: HTTP API + WebSocket server + Dashboard hosting
+- **Consumer Service**: Event processing + Analytics engine + Alerting
+- **Kafka**: Message broker for scalable event streaming
+- **Web Dashboard**: Real-time visualization with live updates
+- **Analytics Engine**: Time-windowed aggregations and intelligence
 
 ## Prerequisites
 
@@ -59,7 +89,29 @@ This will start:
 ./examples/send_events.sh
 ```
 
-### 4. View consumer logs to see processed events
+### 4. Access the Real-Time Dashboard
+
+Open your browser and navigate to:
+```
+http://localhost:8080
+```
+
+You'll see:
+- 📊 **Live Analytics Dashboard** with real-time charts and metrics
+- 📈 **Interactive Visualizations** using Chart.js
+- 🔴 **Live Event Stream** showing events as they happen
+- 📱 **Device & Browser Analytics**
+- ⚡ **Performance Monitoring**
+
+### 5. Test with Enhanced Events
+
+```bash
+./examples/test_dashboard.sh
+```
+
+This sends realistic test data including page views, clicks, and session events with performance metrics.
+
+### 6. View consumer logs to see processed events
 
 ```bash
 docker-compose logs -f consumer
@@ -111,6 +163,48 @@ go run ./cmd/consumer
 ```
 
 ## API Endpoints
+
+### GET / (Dashboard)
+
+Access the real-time analytics dashboard.
+
+**Response:** HTML dashboard with live WebSocket updates
+
+### GET /analytics
+
+Get current analytics snapshot as JSON.
+
+**Response:**
+
+```json
+{
+  "timestamp": "2024-01-01T12:00:00Z",
+  "total_events": 1500,
+  "unique_users": 245,
+  "active_sessions": 12,
+  "events_by_type": {
+    "page_view": 1200,
+    "click": 250,
+    "session": 50
+  },
+  "top_pages": [...],
+  "traffic_sources": [...],
+  "device_stats": {...},
+  "browser_stats": {...},
+  "hourly_page_views": [...],
+  "performance_metrics": {...}
+}
+```
+
+### WebSocket /ws
+
+Real-time WebSocket endpoint for live dashboard updates.
+
+**Message Types:**
+- `analytics_snapshot`: Complete analytics data
+- `analytics_update`: Incremental updates (every 5s)
+- `real_time_event`: Individual events as they happen
+- `alert`: System alerts and notifications
 
 ### POST /event
 
@@ -315,10 +409,6 @@ docker-compose logs kafka
 ### Port conflicts
 
 If port 8080 or 9092 is already in use, you can change the ports in `docker-compose.yml`.
-
-## License
-
-MIT
 
 ## Contributing
 
